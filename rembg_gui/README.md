@@ -1,17 +1,19 @@
 # rembg GUI
 
 A simple, local macOS desktop app that wraps **rembg** behind a graphical
-interface so you can remove image backgrounds without using the terminal.
+interface so you can remove image **and video** backgrounds without using the
+terminal. The window has two tabs: **Images** and **Video**.
 
 - **Toolkit:** Python + PySide6 (Qt) — the most stable option here, with native
   drag-and-drop. (Tkinter was ruled out: your Homebrew Python 3.12 has no Tcl/Tk
   binding.)
 - **Engine:** calls the rembg **Python API** directly (`new_session` + `remove`),
-  not shell commands.
+  not shell commands. Video frame extraction and encoding use **ffmpeg via
+  subprocess**.
 - **No admin rights required.** Everything runs inside your existing virtual
   environment.
 
-## Features
+## Images tab — features
 
 - Add a single image, multiple images, or an entire folder (recursively).
 - Drag & drop images or folders onto the list.
@@ -27,7 +29,45 @@ interface so you can remove image backgrounds without using the terminal.
   (one bad file does not stop the batch). Cancel button to stop early.
 - Processing runs on a background thread, so the window never freezes.
 
+## Video tab — features
+
+Removes the background from every frame of a video and re-exports it.
+
+- **Input:** select a single video file, or drag & drop one onto the list.
+  Detected fps / duration / frame count / audio are shown after loading.
+- **Model + alpha matting:** same controls as the Images tab.
+- **Output Format** (radio buttons):
+  - **Export as Video** — rebuilds a processed video with ffmpeg.
+    - Preserves the **original fps** unless you tick *Override original FPS*.
+    - **Preserves audio** (copied from the source).
+    - **Codec:** *H.264 (.mp4)* or *ProRes 4444 (.mov)*.
+      - ProRes 4444 **keeps transparency** (alpha channel).
+      - H.264 has no alpha, so transparency is flattened onto black.
+  - **Export as PNG Frames** — saves every processed frame as a transparent PNG
+    into `<output>/<videoname>_frames/`, plus a `metadata.txt`.
+    - **FPS** field is recorded as *metadata only* (written to `metadata.txt`);
+      no video is rebuilt.
+    - **Numbering:** *Keep original numbering* or *Restart from 00001*.
+- **Pipeline:** Step A extract frames (ffmpeg) → Step B remove background per
+  frame (rembg) → Step C export. Each step has its own progress bar.
+- Detailed log window and a Cancel button.
+
+### About the FPS field (reconciling the two spec points)
+
+The spec asked for an FPS field "only enabled in PNG mode", but also for an FPS
+**override** in Video mode. Both are satisfied with one FPS spinbox:
+
+- **PNG mode:** the spinbox is always enabled — it's the naming/metadata fps.
+- **Video mode:** the spinbox is disabled by default (original fps is preserved)
+  and becomes enabled only when you tick *Override original FPS*.
+
 ## Requirements
+
+- **ffmpeg / ffprobe** must be installed (used for the Video tab). On macOS:
+  `brew install ffmpeg` (no admin rights needed). Verified present on this
+  machine at `/opt/homebrew/bin/ffmpeg`.
+
+### Python environment
 
 This app expects the virtual environment that already has rembg installed:
 

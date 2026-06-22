@@ -7,6 +7,9 @@
 # ~/.u2net, so the machine running the .app needs internet access the first
 # time each model is used.
 #
+# ffmpeg/ffprobe are NOT bundled — the Video tab calls them from PATH, so the
+# target machine still needs `brew install ffmpeg`.
+#
 # Usage:
 #   ./rembg_gui/build_app.sh
 set -e
