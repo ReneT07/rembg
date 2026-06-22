@@ -42,7 +42,10 @@ Removes the background from every frame of a video and re-exports it.
     - **Preserves audio** (copied from the source).
     - **Codec:** *H.264 (.mp4)* or *ProRes 4444 (.mov)*.
       - ProRes 4444 **keeps transparency** (alpha channel).
-      - H.264 has no alpha, so transparency is flattened onto black.
+      - H.264 has no alpha, so transparency is flattened onto black. Odd frame
+        dimensions are auto-padded to even (libx264 requires even sizes).
+    - Audio is re-encoded to AAC so export never fails on an exotic source
+      audio codec (e.g. PCM in a QuickTime .mov).
   - **Export as PNG Frames** — saves every processed frame as a transparent PNG
     into `<output>/<videoname>_frames/`, plus a `metadata.txt`.
     - **FPS** field is recorded as *metadata only* (written to `metadata.txt`);

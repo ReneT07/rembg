@@ -154,6 +154,7 @@ def build_alpha_group():
 
 class ImageWorker(QObject):
     progress = Signal(int, int)
+    current = Signal(int, int, str)   # index, total, filename (before each image)
     log = Signal(str)
     finished = Signal(int, int)
 
@@ -201,6 +202,7 @@ class ImageWorker(QObject):
             if self._cancel:
                 self.log.emit("Cancelled by user.")
                 break
+            self.current.emit(i, total, os.path.basename(item.path))
             try:
                 dest = self._output_path(item)
                 os.makedirs(os.path.dirname(dest), exist_ok=True)
@@ -317,7 +319,11 @@ class ImageTab(QWidget):
         self.cancel_btn.setEnabled(False)
         self.cancel_btn.clicked.connect(self.cancel_processing)
         right.addWidget(self.cancel_btn)
+        self.status_label = QLabel("Idle.")
+        self.status_label.setStyleSheet("color: gray;")
+        right.addWidget(self.status_label)
         self.progress = QProgressBar()
+        self.progress.setFormat("%v / %m")
         right.addWidget(self.progress)
 
     # input handling
@@ -423,6 +429,7 @@ class ImageTab(QWidget):
         self.worker.moveToThread(self.thread)
         self.thread.started.connect(self.worker.run)
         self.worker.progress.connect(self.on_progress)
+        self.worker.current.connect(self.on_current)
         self.worker.log.connect(self.log_view.appendPlainText)
         self.worker.finished.connect(self.on_finished)
         self.thread.start()
@@ -438,10 +445,17 @@ class ImageTab(QWidget):
         self.progress.setMaximum(total)
         self.progress.setValue(done)
 
+    @Slot(int, int, str)
+    def on_current(self, i, total, name):
+        self.status_label.setStyleSheet("color: black;")
+        self.status_label.setText(f"Processing {i}/{total}: {name}")
+
     @Slot(int, int)
     def on_finished(self, succeeded, failed):
         self.log_view.appendPlainText(
             f"──────── done: {succeeded} ok, {failed} failed ────────")
+        self.status_label.setText(f"Done — {succeeded} ok, {failed} failed.")
+        self.status_label.setStyleSheet("color: gray;")
         if self.thread:
             self.thread.quit()
             self.thread.wait()
@@ -640,7 +654,14 @@ class VideoWorker(QObject):
                                   "-pix_fmt", "yuva444p10le"]
             self.log.emit("   ProRes 4444 selected — transparency is preserved.")
         else:
-            ext, vargs = ".mp4", ["-c:v", "libx264", "-pix_fmt", "yuv420p"]
+            # libx264 + yuv420p requires EVEN width/height; many real videos
+            # (phone clips, screen recordings) have odd dimensions and would
+            # otherwise fail with "width/height not divisible by 2". Pad to the
+            # next even size so encoding always succeeds.
+            ext, vargs = ".mp4", [
+                "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                "-vf", "pad=ceil(iw/2)*2:ceil(ih/2)*2",
+            ]
             self.log.emit("   H.264 selected — transparency is flattened onto "
                           "black (H.264 has no alpha).")
 
@@ -650,8 +671,12 @@ class VideoWorker(QObject):
         cmd = [FFMPEG, "-y", "-framerate", f"{fps}",
                "-i", os.path.join(processed_dir, "frame_%06d.png")]
         if has_audio:
+            # Re-encode audio to AAC rather than '-c:a copy': copy fails when the
+            # source audio codec is incompatible with the target container
+            # (e.g. PCM from a .mov into an .mp4). AAC works in both .mp4 and
+            # .mov and still preserves the audio content.
             cmd += ["-i", self.video_path, "-map", "0:v:0", "-map", "1:a:0",
-                    "-c:a", "copy", "-shortest"]
+                    "-c:a", "aac", "-b:a", "192k", "-shortest"]
             if self.override_fps:
                 self.log.emit("   note: FPS overridden — audio may drift out of "
                               "sync relative to the new frame rate.")
